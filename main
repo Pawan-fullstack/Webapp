@@ -11,7 +11,6 @@ import streamlit_authenticator as stauth
 # define the url structure and headers for http requests
 BASE_URL = "https://www.screener.in/company/{symbol}/"
 
-
 # function to download and parse html content
 def download_and_parse(url):
     response = requests.get(url)
@@ -153,7 +152,6 @@ authenticator = stauth.Authenticate(names,usernames,hashed_passwords,"sales_dash
 name, authetication_status ,username = authenticator.login("Login","main")
 
 
-
 if authetication_status== False:
     st.error("Username / password is incorrect")
 
@@ -161,4 +159,157 @@ if authetication_status== None:
     st.warning("Please enter Username and password ")
 
 authenticator.logout("Logout","sidebar")
-st.sidebar(f"Welcome{name}") 
+ 
+
+if authetication_status:
+
+    # main input
+    symbol_input = st.text_input("Enter Company Symbol", "GAIL")
+
+# sliders for DCF calculation parameters
+coc = st.slider('Cost of Capital (CoC) (%)',8,16,step=1,value=12)  # default set to 12%
+roce_input = st.slider('Return on Capital Employed (RoCE) (%)',10,100,step=10,value=50)  # default set to 50%
+growth_during_high_growth = st.slider('Growth during high growth period ($)',8,20,step=2,value=12)  # default set to 12%
+high_growth_period = st.slider('High growth period (years)',10,25,step=2,value=14)  # default set to 14 years
+fade_period = st.select_slider('Fade period (years)', options=[5,10,15,20], value=10)  # default set to 10 years  # default set to 10 years
+terminal_growth_rate = st.select_slider('Terminal growth rate (%)', options=[0,1,2,3,4,5,6,7,7.5], value=5)  # default set to 2%
+
+# main function to handle data fetching and processing
+def main():
+    url = BASE_URL.format(symbol=symbol_input)
+    parsed_html = download_and_parse(url)
+
+    quarters_df = get_table(parsed_html, 'quarters')
+    profit_loss_df =  get_table(parsed_html, 'profit-loss')
+    profit_loss_additional_df = get_profit_loss_additional(parsed_html)
+    balance_sheet_df = get_table(parsed_html, 'balance-sheet')
+    cash_flow_df = get_table(parsed_html, 'cash-flow')
+    ratios_df = get_table(parsed_html, 'ratios')
+    shareholding_df = get_table(parsed_html, 'shareholding')
+    
+    # fetch key metrics
+    stock_symbol = find_metric(parsed_html, 'h1', 'class', 'h2 shrink-text')  # fetch the stock symbol
+
+    current_pe = None
+    pe_elements = parsed_html.find_all('li', class_='flex flex-space-between')  # find all 'li' elements once
+    for li in pe_elements:
+        if 'Stock P/E' in li.text:  # check if 'Stock P/E' is in the text of the 'li' element
+            number_span = li.find('span', class_='number')
+            if number_span:
+                current_pe = number_span.text.strip()  # store the value if found
+                break
+
+    current_price = None
+    price_elements = parsed_html.find_all('li', class_='flex flex-space-between')  # find all 'li' elements once
+    for li in price_elements:
+        if 'Current Price' in li.text:  
+            number_span = li.find('span', class_='number')
+            if number_span:
+                current_price = number_span.text.strip()  # store the value if found
+                break
+
+    epsvalue=find_specific_eps(profit_loss_df, 'Mar 2024')
+    rocevalue=find_specific_roce(ratios_df, 'ROCE %')
+
+    if current_price and epsvalue and epsvalue != 'EPS value not found':
+        try:
+            fy23_pe = float(current_price.replace(',', '')) / float(epsvalue)
+            fy23_pe_calc = f"{fy23_pe:.2f}"  # format to 2 decimal places
+        except ValueError:
+            fy23_pe_calc = "Error in calculation"
+    else:
+        fy23_pe_calc = "Data not available for calculation"
+    
+    
+    sales_growth_df = profit_loss_additional_df[profit_loss_additional_df['Metric'].str.contains('Compounded Sales Growth')].reset_index()
+    profit_growth_df = profit_loss_additional_df[profit_loss_additional_df['Metric'].str.contains('Compounded Profit Growth')].reset_index()
+   
+    
+    # preparing dataframes for display
+    prepared_sales_growth = prepare_growth_display(profit_loss_additional_df, 'Compounded Sales Growth')
+    prepared_profit_growth = prepare_growth_display(profit_loss_additional_df, 'Compounded Profit Growth')
+    sales_growth_chart = plot_growth_chart(sales_growth_df, "Compounded Sales Growth")
+    profit_growth_chart = plot_growth_chart(profit_growth_df, "Compounded Profit Growth")
+
+
+    if epsvalue and current_price:
+        epsvalue = float(epsvalue.replace(',', ''))
+        current_price = float(current_price.replace(',', ''))
+        fy23_pe = current_price / epsvalue
+        intrinsic_pe = dcf_intrinsic_pe(epsvalue, 12, high_growth_period, fade_period, terminal_growth_rate, coc)
+        overvaluation = calculate_overvaluation(current_price, fy23_pe, intrinsic_pe)
+        
+    else:
+        st.error("Financial data is incomplete or missing.")
+
+    # display the fetched data
+    st.write(f"Intrinsic P/E calculated: {intrinsic_pe:.2f}")
+    st.write(f"Degree of Overvaluation: {overvaluation:.2f}%")
+    st.write(f"Stock Symbol: {stock_symbol}")
+    st.write(f"Current P/E Ratio: {current_pe}")
+    st.write(f"Current Price: {current_price}")
+    st.write(f"EPS: {epsvalue}")
+    st.write(f"FY23 PE: {fy23_pe_calc}")
+    st.write(f"5 Year Median Pre-Tax RoCE %: {rocevalue}")
+    st.table(prepared_sales_growth)
+    st.table(prepared_profit_growth)
+    st.plotly_chart(sales_growth_chart, use_container_width=True)
+    st.plotly_chart(profit_growth_chart, use_container_width=True)
+
+    st.markdown(
+    """
+    <style>
+    .kpi-card {
+        background-color: #222;
+        padding: 15px;
+        border-radius: 10px;
+        color: white;
+        text-align: left;
+        font-family: Arial, sans-serif;
+        width: 100%;
+        margin-bottom: 10px;
+    }
+    .kpi-title {
+        font-size: 16px;
+        font-weight: bold;
+        color: #bbb;
+    }
+    .kpi-value {
+        font-size: 32px;
+        font-weight: bold;
+        color: white;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.markdown(
+        """
+        <div class="kpi-card">
+            <div class="kpi-title">Intrinsic P/E calculated</div>
+            <div class="kpi-value"></div>
+            
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+with col2:
+    st.markdown(
+        """
+        <div class="kpi-card">
+            <div class="kpi-title">Degree of Overvaluation</div>
+            <div class="kpi-value"></div>
+            
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+# trigger the main function with a button   
+if st.button('Show Data'):
+    main()
