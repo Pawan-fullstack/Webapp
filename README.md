@@ -70,3 +70,11 @@ You can customize the authentication system by modifying `auth.py`. Available op
 - Adding additional user fields
 - Implementing email verification
 - Adding password reset functionality
+
+
+
+
+
+![Capture](https://github.com/user-attachments/assets/f277aa73-56ec-4b79-9396-1998f97a089f)
+
+
