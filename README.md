@@ -37,10 +37,6 @@ stock-pondering-app/
 ├── login.py             # Login page
 ├── signup.py            # Signup page
 ├── home.py              # Home page
-├── account.py           # User account page
-├── trending.py          # Trending stocks/posts page
-├── your_post.py         # User posts page
-├── about.py             # About page
 ├── requirements.txt     # Required packages
 └── users.db             # SQLite database (created on first run)
 ```
