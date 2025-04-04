@@ -5,7 +5,7 @@ import pandas as pd
 import plotly.express as px
 import numpy as np
 from streamlit_option_menu import option_menu
-import about, account, home
+import home
 import auth
 import login, signup
 import os
@@ -170,7 +170,7 @@ def main():
     with st.sidebar:
         app = option_menu(
             menu_title='Stock Analy',
-            options=['Home',  'Login', 'Signup'],
+            options=['Home', 'Account', 'Login', 'Signup'],
             icons=['house-fill', 'person-circle', 'trophy-fill', 'chat-fill', 'info-circle', 'box-arrow-in-right', 'person-plus'],
             menu_icon='chat-text-fill',
             default_index=0,
@@ -192,12 +192,6 @@ def main():
     # Page routing
     if app == 'Home':
         home.app()
-    elif app == 'Account':
-        check_authentication()
-        account.app()
-    elif app == 'About':
-        about.app()
-
     elif app == 'Login':
         login.app()
     elif app == 'Signup':
