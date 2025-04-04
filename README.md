@@ -1,4 +1,4 @@
-# Stock Pondering App
+# Stock Analy App
 
 A Streamlit-based web application for stock analysis with user authentication.
 
